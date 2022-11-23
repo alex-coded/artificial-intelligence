@@ -76,7 +76,8 @@ class Network:
     def online_training(self, training_data: np.ndarray,
                         activation_function: Callable[[np.ndarray], np.ndarray]):
         for idx in range(len(training_data[0])):
-            self.forward_propagation(training_data[0][idx], training_data[1][idx], activation_function)
+            self.forward_propagation(training_data[0][idx], training_data[1][idx],
+                                     activation_function)  # target, layer nr of neurons
             self.backpropagate(training_data[0][idx], training_data[1][idx])
 
     def compute_average_total_error(self, data_set: np.ndarray,
@@ -106,6 +107,7 @@ class Network:
         return epochs
 
     def test_network_classification(self, test_data: np.ndarray, activation_function: [[np.ndarray], np.ndarray]):
+        matrix = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
         accurate = 0
         inaccurate = 0
         for index in range(len(test_data[0])):
@@ -114,8 +116,11 @@ class Network:
             self.forward_propagation(coordinates, actual_value, activation_function)
             prediction_probabilities = self.layers[-1].layer_activation
             prediction = np.argmax(prediction_probabilities)
+            matrix[actual_value][prediction] += 1
+
             if actual_value == prediction:
                 accurate += 1
             else:
                 inaccurate += 1
-        return accurate, inaccurate
+
+        return accurate, inaccurate, matrix

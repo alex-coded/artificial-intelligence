@@ -20,6 +20,7 @@ def sigmoid_activation(z: np.ndarray):
     return 1.0 / (1 + np.exp(-z))
 
 
+
 def softmax_activation(z: np.ndarray):
     return np.exp(z) / np.sum(np.exp(z))
 
