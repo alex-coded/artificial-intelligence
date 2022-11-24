@@ -31,8 +31,8 @@ class Layer:
     def calc_output(self, input_train):
         return (input_train @ self.weights) + self.biases
 
-    def get_activation(self, training_input, activate):
-        output = self.calc_output(training_input)
-        return activate(output)
+    def get_activation(self, train_inp, activ_func):
+        output = self.calc_output(train_inp)
+        return activ_func(output)
 
 

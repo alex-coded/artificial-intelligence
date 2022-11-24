@@ -9,4 +9,5 @@ def plot_matrix(array):
         plt.figure(figsize=(10, 7))
         sn.heatmap(df_cm, annot=True)
         plt.savefig('confusion_matrix.png')
+        plt.show()
 
