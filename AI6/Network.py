@@ -1,126 +1,117 @@
-from typing import Callable, List
-
 import numpy as np
-
-import utils
+import util
 from Layer import Layer
 
 
 class Network:
-    layer_sizes: list
-    learning_rate: float
     nr_of_epochs: int
     layers: list
+    l_sizes: list
+    learn_rate: float
 
     def __init__(self, layer_sizes, learning_rate, nr_of_epochs):
-        self.layer_sizes = layer_sizes
-        self.learning_rate = learning_rate
+        self.l_sizes = layer_sizes
+        self.learn_rate = learning_rate
         self.nr_of_epochs = nr_of_epochs
         self.layers = []
-        for idx, input_size in enumerate(layer_sizes[:-1]):
-            # the current layers nr of outputs(nodes) is the next layers number of inputs
-            self.layers += [Layer(input_size, layer_sizes[idx + 1])]
+        for idx, inp_size in enumerate(layer_sizes[:-1]):
+            self.layers += [Layer(inp_size, layer_sizes[idx + 1])]      # the current layers nr of outputs(nodes) is the next layers number of inputs
 
-    def make_copy(self):
-        copy = Network(self.layer_sizes, self.learning_rate, self.nr_of_epochs)
+    def forward_prop(self, training_set, targ, activ_func):
+        cur_layer_inp = training_set
+        for layer in self.layers:
+            activ = layer.get_activation(cur_layer_inp, activ_func)
+            layer.l_activ = activ
+            cur_layer_inp = layer.l_activ
+        comparison_targ = util.nr_to_nr_arr(targ, self.layers[-1].neuron_nr)
+        return self.get_out_l_total_err(comparison_targ)
+
+    def create_copy(self):
+        copy = Network(self.l_sizes, self.learn_rate, self.nr_of_epochs)
         for idx, layer in enumerate(self.layers):
-            layer_in_copy = copy.layers[idx]
-            layer_in_copy.weights = np.copy(layer.weights)
-            layer_in_copy.biases = np.copy(layer.biases)
+            l_in_copy = copy.layers[idx]
+            l_in_copy.weights = np.copy(layer.weights)
+            l_in_copy.biases = np.copy(layer.biases)
         return copy
 
-    def forward_propagation(self, training_set: np.ndarray, target: int,
-                            activation_function: Callable[[np.ndarray], np.ndarray]):
-        current_layer_input = training_set
-        for layer in self.layers:
-            activation = layer.compute_activation(current_layer_input, activation_function)
-            layer.layer_activation = activation
-            current_layer_input = layer.layer_activation
-        comparison_target = utils.number_to_number_array(target, self.layers[-1].nr_of_neurons)
-        return self.compute_output_layer_total_error(comparison_target)
+    def get_out_l_total_err(self, targ):
+        err = targ - self.layers[-1].l_activ
+        err = (err * err) / 2
+        return np.sum(err)
 
-    def compute_output_layer_total_error(self, target: np.ndarray):
-        error = target - self.layers[-1].layer_activation
-        error = (error * error) / 2
-        return np.sum(error)
+    def compute_last_layer_delta(self, targ):
+        out_l = self.layers[-1]
+        outp_activ = out_l.l_activ
+        return - (targ - outp_activ) * outp_activ * (1 - outp_activ)
 
-    def compute_last_layer_delta(self, target: np.ndarray):
-        output_layer = self.layers[-1]
-        output_activation = output_layer.layer_activation
-        return - (target - output_activation) * output_activation * (1 - output_activation)
+    def compute_hidden_layer_delta(self, out_l_delta):
+        out_l = self.layers[-1]
+        hid_l = self.layers[-2]
+        hid_activ = hid_l.l_activ
+        return (out_l_delta @ out_l.weights.T) * hid_activ * (1 - hid_activ)
 
-    def compute_hidden_layer_delta(self, output_layer_delta: np.ndarray):
-        output_layer = self.layers[-1]
-        hidden_layer = self.layers[-2]
-        hidden_activation = hidden_layer.layer_activation
-        return (output_layer_delta @ output_layer.weights.T) * hidden_activation * (1 - hidden_activation)
+    def backprop(self, training_input, targ):
+        out_l = self.layers[-1]
+        hid_l = self.layers[-2]
 
-    def backpropagate(self, training_input: np.ndarray, target: int):
-        output_layer = self.layers[-1]
-        hidden_layer = self.layers[-2]
+        first_l_inp = training_input.reshape(1, -1)
+        last_l_delta = self.compute_last_layer_delta(
+            util.nr_to_nr_arr(targ, out_l.neuron_nr))
+        out_l.cost_grad_w = hid_l.l_activ.T @ last_l_delta
+        out_l.cost_grad_b = last_l_delta
+        out_l.weights -= self.learn_rate * out_l.cost_grad_w
+        out_l.biases -= self.learn_rate * out_l.cost_grad_b
 
-        first_layer_input = training_input.reshape(1, -1)
-        last_layer_delta = self.compute_last_layer_delta(
-            utils.number_to_number_array(target, output_layer.nr_of_neurons))
-        output_layer.cost_gradient_w = hidden_layer.layer_activation.T @ last_layer_delta
-        output_layer.cost_gradient_b = last_layer_delta
-        output_layer.weights -= self.learning_rate * output_layer.cost_gradient_w
-        output_layer.biases -= self.learning_rate * output_layer.cost_gradient_b
+        hid_l_delta = self.compute_hidden_layer_delta(last_l_delta)
+        hid_l.cost_grad_w = first_l_inp.T @ hid_l_delta
+        hid_l.cost_grad_b = hid_l_delta
+        hid_l.weights -= self.learn_rate * hid_l.cost_grad_w
+        hid_l.biases -= self.learn_rate * hid_l.cost_grad_b
 
-        hidden_layer_delta = self.compute_hidden_layer_delta(last_layer_delta)
-        hidden_layer.cost_gradient_w = first_layer_input.T @ hidden_layer_delta
-        hidden_layer.cost_gradient_b = hidden_layer_delta
-        hidden_layer.weights -= self.learning_rate * hidden_layer.cost_gradient_w
-        hidden_layer.biases -= self.learning_rate * hidden_layer.cost_gradient_b
+    def get_average_total_err(self, data, activ_func):
+        total_set_err = 0
+        for idx in range(len(data[0])):
+            total_set_err += self.forward_prop(data[0][idx], data[1][idx], activ_func)
+        return total_set_err / len(data[0])
 
-    def online_training(self, training_data: np.ndarray,
-                        activation_function: Callable[[np.ndarray], np.ndarray]):
+    def iterative_training(self, training_data, activate):
         for idx in range(len(training_data[0])):
-            self.forward_propagation(training_data[0][idx], training_data[1][idx],
-                                     activation_function)  # target, layer nr of neurons
-            self.backpropagate(training_data[0][idx], training_data[1][idx])
+            self.forward_prop(training_data[0][idx], training_data[1][idx],
+                              activate)  # targ, layer nr of neurons
+            self.backprop(training_data[0][idx], training_data[1][idx])
 
-    def compute_average_total_error(self, data_set: np.ndarray,
-                                    activation_function: Callable[[np.ndarray], np.ndarray]):
-        total_set_error = 0
-        for idx in range(len(data_set[0])):
-            total_set_error += self.forward_propagation(data_set[0][idx], data_set[1][idx], activation_function)
-        return total_set_error / len(data_set[0])
+    def test_net_classification(self, test_data, activ_func):
+        m = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+        acc = 0
+        inacc = 0
+        for index in range(len(test_data[0])):
+            coordinates = test_data[0][index]
+            actual_v = test_data[1][index]
+            self.forward_prop(coordinates, actual_v, activ_func)
+            predict_prob = self.layers[-1].l_activ
+            pred = np.argmax(predict_prob)
+            m[actual_v][pred] += 1
 
-    def network_training(self, training_data: np.ndarray,
-                         validation_data: np.ndarray,
-                         activation_function: Callable[[np.ndarray], np.ndarray]
-                         ):
+            if actual_v == pred:
+                acc += 1
+            else:
+                inacc += 1
+
+        return acc, inacc, m
+
+    def training(self, training_data, validation_data, activ_func):
         epochs = {}
         iteration = 1
         while iteration <= self.nr_of_epochs:
-            self.online_training(training_data, activation_function)
-            current_epoch_network = self.make_copy()
+            self.iterative_training(training_data, activ_func)
+            curr_epoch_network = self.create_copy()
             epochs[iteration] = (
-                current_epoch_network, current_epoch_network.compute_average_total_error(validation_data,
-                                                                                         activation_function,
-                                                                                         ),
-                current_epoch_network.test_network_classification(validation_data, activation_function)
+                curr_epoch_network, curr_epoch_network.get_average_total_err(validation_data,
+                                                                                   activ_func,
+                                                                                   ),
+                curr_epoch_network.test_net_classification(validation_data, activ_func)
             )
             iteration += 1
-            utils.shuffle_in_unison(training_data[0], training_data[1])
+            util.shuffle(training_data[0], training_data[1])
         return epochs
 
-    def test_network_classification(self, test_data: np.ndarray, activation_function: [[np.ndarray], np.ndarray]):
-        matrix = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
-        accurate = 0
-        inaccurate = 0
-        for index in range(len(test_data[0])):
-            coordinates = test_data[0][index]
-            actual_value = test_data[1][index]
-            self.forward_propagation(coordinates, actual_value, activation_function)
-            prediction_probabilities = self.layers[-1].layer_activation
-            prediction = np.argmax(prediction_probabilities)
-            matrix[actual_value][prediction] += 1
-
-            if actual_value == prediction:
-                accurate += 1
-            else:
-                inaccurate += 1
-
-        return accurate, inaccurate, matrix

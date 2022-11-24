@@ -8,9 +8,5 @@ def plot_matrix(array):
                              columns=[i for i in ["Iris-setosa", "Iris-versicolor", "Iris-virginica"]])
         plt.figure(figsize=(10, 7))
         sn.heatmap(df_cm, annot=True)
-
-        # fig = swarm_plot.get_figure()
-        # fig.savefig("out.png")
-
         plt.savefig('confusion_matrix.png')
 
